@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent" 
+    android:orientation="vertical"
+    android:background="#FFFFFF"
+    >
+
+    <LinearLayout
+        android:id="@+id/linearLayoutMergeMode"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        >
+	    <Button
+	        android:id="@+id/buttonMergeEbookdroid"
+	        android:layout_width="0dp"
+	        android:layout_height="wrap_content"
+	        android:text="垂直滚动"
+	        android:layout_weight="1"
+	        />
+	    <Button
+	        android:id="@+id/buttonMergeMupdf"
+	        android:layout_width="0dp"
+	        android:layout_height="wrap_content"
+	        android:text="水平滚动"
+	        android:layout_weight="1"
+	        />
+	    <Button
+	        android:id="@+id/buttonMergeAnnot"
+	        android:layout_width="0dp"
+	        android:layout_height="wrap_content"
+	        android:text="批注开关"
+	        android:layout_weight="1"
+	        />
+	</LinearLayout>
+	<FrameLayout 
+	    android:layout_width="match_parent"
+	    android:layout_height="match_parent" 
+	    >
+	    
+		<LinearLayout
+	        android:layout_width="match_parent"
+	        android:layout_height="match_parent"
+	       	android:orientation="vertical"
+	       	android:visibility="invisible"
+	       	android:id="@+id/linearLayoutMergeMupdf"
+	        >
+	        <include layout="@layout/ebookdroid_mupdf_activity_main"/>
+	    </LinearLayout>
+	
+	    <LinearLayout
+	        android:layout_width="match_parent"
+	        android:layout_height="match_parent"
+	        android:orientation="vertical" 
+	        android:visibility="visible"
+	        android:id="@+id/linearLayoutMergeEbookdroid"
+	        >
+	        <include layout="@layout/ebookdroid_view_activity_main"/>
+	    </LinearLayout>
+	</FrameLayout>
+</LinearLayout>

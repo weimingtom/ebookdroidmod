@@ -1,0 +1,4 @@
+<resources>
+    <style name="SherlockAppTheme" parent="Theme.Sherlock.Light.DarkActionBar">
+    </style>
+</resources>

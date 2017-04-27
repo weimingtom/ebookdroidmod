@@ -1,0 +1,131 @@
+package org.ebookdroid2.adapter;
+
+import java.util.Collections;
+
+import org.ebookdroid2.dialog.GoToPageDialog;
+import org.ebookdroid2.manager.BookSettings;
+import org.ebookdroid2.manager.Bookmark;
+import org.ebookdroid2.manager.SettingsManager;
+import org.ebookdroid2.page.Page;
+import org.ebookdroid2.page.PageIndex;
+import org.ebookdroid2.view.BookmarkView;
+
+import android.content.Context;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.BaseAdapter;
+import android.widget.ProgressBar;
+import android.widget.TextView;
+
+import com.iteye.weimingtom.ebdmod.R;
+
+public final class BookmarkAdapter extends BaseAdapter {
+    public final BookSettings bookSettings;
+    private final GoToPageDialog actions;
+    private final Page lastPage;
+    private final Bookmark start;
+    private final Bookmark end;
+    private final Context context;
+
+    public BookmarkAdapter(final Context context, final GoToPageDialog actions, final Page lastPage,
+            final BookSettings bookSettings) {
+        this.context = context;
+        this.actions = actions;
+        this.lastPage = lastPage;
+        this.bookSettings = bookSettings;
+        this.start = new Bookmark(true, "开始", PageIndex.FIRST, 0, 0);
+        this.end = new Bookmark(true, "结束", PageIndex.LAST, 0, 1);
+        Collections.sort(bookSettings.bookmarks);
+    }
+
+    public void add(final Bookmark... bookmarks) {
+        for (final Bookmark bookmark : bookmarks) {
+            bookSettings.bookmarks.add(bookmark);
+        }
+        Collections.sort(bookSettings.bookmarks);
+        SettingsManager.storeBookSettings(bookSettings);
+        notifyDataSetChanged();
+    }
+
+    public void update(Bookmark b) {
+        Collections.sort(bookSettings.bookmarks);
+        SettingsManager.storeBookSettings(bookSettings);
+        notifyDataSetInvalidated();
+    }
+
+    public void remove(final Bookmark b) {
+        if (!b.service) {
+            bookSettings.bookmarks.remove(b);
+            SettingsManager.storeBookSettings(bookSettings);
+            notifyDataSetChanged();
+        }
+    }
+
+    public void clear() {
+        bookSettings.bookmarks.clear();
+        SettingsManager.storeBookSettings(bookSettings);
+        notifyDataSetChanged();
+    }
+
+    @Override
+    public int getCount() {
+        return 2 + bookSettings.bookmarks.size();
+    }
+
+    public boolean hasUserBookmarks() {
+        return !bookSettings.bookmarks.isEmpty();
+    }
+
+    @Override
+    public Object getItem(final int index) {
+        return getBookmark(index);
+    }
+
+    public Bookmark getBookmark(final int index) {
+        if (index == 0) {
+            return start;
+        }
+        if (index - 1 < bookSettings.bookmarks.size()) {
+            return bookSettings.bookmarks.get(index - 1);
+        }
+        return end;
+    }
+
+    @Override
+    public long getItemId(final int index) {
+        return index;
+    }
+
+    @Override
+    public View getView(final int index, View itemView, final ViewGroup parent) {
+        if (itemView == null) {
+            itemView = LayoutInflater.from(parent.getContext()).inflate(R.layout.ebookdroid_bookmark, parent, false);
+            final BookmarkView text = (BookmarkView) itemView.findViewById(R.id.bookmarkName);
+            text.setActions(actions);
+            final ProgressBar bar = (ProgressBar) itemView.findViewById(R.id.bookmarkPage);
+            bar.setProgressDrawable(context.getResources().getDrawable(R.drawable.ebookdroid_viewer_goto_dlg_progress));
+        }
+        final Bookmark b = getBookmark(index);
+        final TextView text = (TextView) itemView.findViewById(R.id.bookmarkName);
+        text.setText(b.name);
+        text.setTag(b);
+        final ProgressBar bar = (ProgressBar) itemView.findViewById(R.id.bookmarkPage);
+        bar.setMax(lastPage != null ? lastPage.index.viewIndex : 0);
+        bar.setProgress(b.page.viewIndex);
+        final View btn = itemView.findViewById(R.id.bookmark_remove);
+        if (b.service) {
+            btn.setVisibility(View.GONE);
+        } else {
+            btn.setVisibility(View.VISIBLE);
+            btn.setOnClickListener(new View.OnClickListener() {
+				@Override
+				public void onClick(View arg0) {
+					actions.showDeleteBookmarkDlg(arg0);
+				}
+            });
+            btn.setTag(b);
+        }
+        return itemView;
+    }
+}

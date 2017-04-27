@@ -1,0 +1,679 @@
+﻿(X) ebookdroid.h
+	int getDescriptor(JNIEnv *env, jobject fd);
+	const char* GetStringUTFChars(JNIEnv *env, jstring jstr, jboolean* iscopy);
+	void ReleaseStringUTFChars(JNIEnv *env, jstring jstr, const char* str);
+
+(X)ebookdroidjni.c
+	* 这个模块没用到org.ebookdroid.EBookDroidLibraryLoader（libjnigraphics的AndroidBitmap_*方法）
+	* 这个模块没用到org.ebookdroid.common.bitmaps.NativeTextureRef（malloc内存块和java数组交互）
+	----------------------------------------
+	static void* handler = NULL; //存储dlopen句柄
+	static int present = 0; //是否成功获取到AndroidBitmap_xxx指针
+	JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *jvm, void *reserved)
+		调用NativeBitmapInit，标记present为1
+	JNIEXPORT void JNICALL JNI_OnUnload(JavaVM *jvm, void *reserved)
+		调用closeHandler
+	JNIEXPORT jboolean JNICALL Java_org_ebookdroid_EBookDroidLibraryLoader_free(JNIEnv *env, jobject this)
+		调用closeHandler
+	JNIEXPORT jboolean JNICALL Java_org_ebookdroid_EBookDroidLibraryLoader_isNativeGraphicsAvailable(JNIEnv *env, jobject this)
+		返回present的值
+	void* NativeBitmapInit()
+		用dlopen的方法获取函数指针NativeBitmap_getInfo，NativeBitmap_lockPixels和NativeBitmap_unlockPixels
+		分别对应AndroidBitmap_getInfo，AndroidBitmap_lockPixels和AndroidBitmap_unlockPixels
+		标记present为1（在JNI_OnLoad中调用，实际应该放在此处）
+	void closeHandler()
+		关闭NativeBitmapInit中dlopen打开的句柄，并且标记present为0
+	----------------------------------------
+	int getDescriptor(JNIEnv *env, jobject fd)
+		返回int型descriptor属性
+	const char* GetStringUTFChars(JNIEnv *env, jstring jstr, jboolean* iscopy)
+		jstr转UTF8字符串
+	void ReleaseStringUTFChars(JNIEnv *env, jstring jstr, const char* str)
+		回收转换后的UTF8字符串
+	----------------------------------------
+	JNIEXPORT jint JNICALL Java_org_ebookdroid_common_bitmaps_NativeTextureRef_nativeSetPixels(JNIEnv *env, jclass cls,
+                                                                                           jint ref, jint ownwidth,
+                                                                                           jint ownheight,
+                                                                                           jintArray pixels, jint width,
+                                                                                           jint height)
+		把java数组复制到c句柄（malloc创建句柄）
+	JNIEXPORT void JNICALL Java_org_ebookdroid_common_bitmaps_NativeTextureRef_nativeGetRegionPixels(JNIEnv *env,
+                                                                                                 jclass cls, jint ref,
+                                                                                                 jint ownwidth,
+                                                                                                 jint ownheight,
+                                                                                                 jintArray pixels,
+                                                                                                 jint left, jint top,
+                                                                                                 jint width,
+                                                                                                 jint height)
+		c句柄像素复制到java数组（带范围）
+    JNIEXPORT void JNICALL Java_org_ebookdroid_common_bitmaps_NativeTextureRef_nativeGetPixels(JNIEnv *env, jclass cls,
+                                                                                           jint ref, jintArray pixels,
+                                                                                           jint width, jint height)
+		c句柄像素复制到java数组
+    JNIEXPORT jint JNICALL Java_org_ebookdroid_common_bitmaps_NativeTextureRef_nativeRecycle(JNIEnv *env, jclass cls,
+                                                                                         jint ref)
+		free回收C句柄
+    
+
+javahelpers.h
+	ArrayListHelper
+	ArrayListHelper::ArrayListHelper
+	ArrayListHelper_s
+	ArrayListHelper_init
+		JNI初始化
+	ArrayListHelper::create
+	jobject ArrayListHelper_create(ArrayListHelper* that)
+		创建ArrayList实例
+	ArrayListHelper::add(jobject arrayList, jobject obj)
+	void ArrayListHelper_add(ArrayListHelper* that, jobject arrayList, jobject obj)
+		添加对象ArrayList::add
+	------------------------------------------
+	StringHelper::StringHelper
+		JNI初始化封装java.lang.String
+	jstring StringHelper::toString(const char* str)
+		UTF8字符串转化为jstring
+	void StringHelper::release(jstring str)
+		释放局部引用
+	jstring StringHelper::toLowerCase(jstring str)
+		String#toLowerCase
+	int StringHelper::indexOf(jstring str, jstring pattern)
+		String#indexOf
+	------------------------------------------
+	CodecPageInfoHelper::CodecPageInfoHelper
+		JNI封装org.ebookdroid.core.codec.CodecPageInfo
+	jobject setSize(jobject cpi, int width, int height)
+	jobject setDpi(jobject cpi, int dpi)
+    jobject setRotation(jobject cpi, int rotation)
+    jobject setVersion(jobject cpi, int version)
+		CodecPageInfo属性设置封装
+	------------------------------------------
+	PageTextBoxHelper::PageTextBoxHelper
+	PageTextBoxHelper_init
+		JNI初始化封装org.ebookdroid.core.codec.PageTextBox
+	jobject create()
+	jobject PageTextBoxHelper_create(PageTextBoxHelper* that)
+		创建对象
+    jobject setRect(jobject ptb, const int* coords)
+    jobject PageTextBoxHelper_setRect(PageTextBoxHelper* that, jobject ptb, const int* coords)
+		设置区域
+    jobject setText(jobject ptb, jstring text)
+    jobject PageTextBoxHelper_setText(PageTextBoxHelper* that, jobject ptb, jstring text)
+		设置文本
+	------------------------------------------
+	CharacterHelper_init
+		封装java/lang/Character
+	unsigned short CharacterHelper_toLowerCase(CharacterHelper* that, unsigned short ch)
+		Character#toLowerCase
+	------------------------------------------
+	
+
+jni_concurrent.c
+	实现fz_lock()/fz_unlock()
+	------------------------------------------
+	typedef pthread_mutex_t jni_mutex;
+	#define jni_init_mutex(l) pthread_mutex_init(l, NULL)
+	#define jni_destroy_mutex(l) pthread_mutex_destroy(l)
+	#define jni_enter_critical(l) pthread_mutex_lock(l)
+	#define jni_leave_critical(l) pthread_mutex_unlock(l)
+	typedef struct jni_locks_s jni_locks;
+	struct jni_locks_s
+	JNI_LOCK_INTERNAL = FZ_LOCK_MAX, JNI_MAX_LOCKS
+	------------------------------------------
+	static void jni_lock_internal(void *user, int lock)
+		进入关键区
+	static void jni_unlock_internal(void *user, int lock)
+		离开关键区
+	static void * jni_new_lock_obj()
+		创建自封装的锁对象jni_locks
+	fz_locks_context * jni_new_locks()
+		创建fz_locks_context（带回调和jni_locks）
+	void jni_free_locks(fz_locks_context *locks)
+		释放锁fz_locks_context
+	jni_lock(fz_context *ctx)
+	jni_unlock(fz_context *ctx)
+		进入和退出锁区域
+	------------------------------------------
+	
+(X) nativebitmap.h
+	AndroidBitmap_getInfo
+	AndroidBitmap_lockPixels
+	AndroidBitmap_unlockPixels
+		函数指针声明
+	AndroidBitmap_getInfo NativeBitmap_getInfo;
+	AndroidBitmap_lockPixels NativeBitmap_lockPixels;
+	AndroidBitmap_unlockPixels NativeBitmap_unlockPixels;
+		全局函数指针变量声明
+		
+
+pdfdroidbridge.cpp
+	------------------------------------------
+	#define FORMAT_PDF 0
+	#define FORMAT_XPS 1
+		格式类型
+	#define DEBUG(args...) \
+	#define ERROR(args...) \
+	#define INFO(args...) \
+		调试输出
+	typedef struct renderdocument_s renderdocument_t;
+	struct renderdocument_s
+	{
+		fz_context *ctx;
+		fz_document *document;
+		fz_outline *outline;
+		unsigned char format; // save current document format.
+	};
+		封装fz_document的句柄（userdata指针）
+	typedef struct renderpage_s renderpage_t;
+	struct renderpage_s
+	{
+		fz_context *ctx;
+		fz_page *page;
+		int number;
+		fz_display_list* pageList;
+	};
+		封装fz_page的句柄（userdata指针）
+	#define RUNTIME_EXCEPTION "java/lang/RuntimeException"
+	#define PASSWORD_REQUIRED_EXCEPTION "org/ebookdroid/droids/mupdf/codec/exceptions/MuPdfPasswordRequiredException"
+	#define WRONG_PASSWORD_EXCEPTION "org/ebookdroid/droids/mupdf/codec/exceptions/MuPdfWrongPasswordEnteredException"
+		抛出异常类型
+	extern fz_locks_context * jni_new_locks();
+		打开文档时的锁，这个锁会传入上下文中
+	extern void jni_free_locks(const fz_locks_context *locks);
+		关闭文档时释放锁
+	------------------------------------------
+	void mupdf_throw_exception_ex(JNIEnv *env, const char* exception, char *message)
+		抛出异常的统一方法
+	void mupdf_throw_exception(JNIEnv *env, char *message)
+		抛出运行期异常
+	static void mupdf_free_document(renderdocument_t* doc)
+		在抛出异常时释放所有资源
+	void setFontFileName(char* ext_Font, const char* fontFileName)
+		复制字符串，如果不成功的话设置为空字符串
+	------------------------------------------
+(X)
+	JNIEXPORT void JNICALL
+	Java_org_ebookdroid_droids_mupdf_codec_MuPdfContext_setMonoFonts(JNIEnv *env, jclass clazz, jstring regular,
+																	 jstring italic, jstring bold, jstring boldItalic)
+(X)
+	JNIEXPORT void JNICALL
+	Java_org_ebookdroid_droids_mupdf_codec_MuPdfContext_setSansFonts(JNIEnv *env, jclass clazz, jstring regular,
+																	 jstring italic, jstring bold, jstring boldItalic)
+(X)
+	JNIEXPORT void JNICALL
+	Java_org_ebookdroid_droids_mupdf_codec_MuPdfContext_setSerifFonts(JNIEnv *env, jclass clazz, jstring regular,
+																	 jstring italic, jstring bold, jstring boldItalic)
+(X)
+	JNIEXPORT void JNICALL
+	Java_org_ebookdroid_droids_mupdf_codec_MuPdfContext_setSymbolFont(JNIEnv *env, jclass clazz, jstring regular)
+(X)
+	JNIEXPORT void JNICALL
+	Java_org_ebookdroid_droids_mupdf_codec_MuPdfContext_setDingbatFont(JNIEnv *env, jclass clazz, jstring regular)
+		这四个函数都是设置全局变量的值，已经没有用了
+	------------------------------------------
+	JNIEXPORT jlong JNICALL
+	Java_org_ebookdroid_droids_mupdf_codec_MuPdfDocument_open(JNIEnv *env, jclass clazz, jint storememory, jint format, jstring fname,
+														  jstring pwd)
+		打开文档，实际调用jni_new_locks和fz_new_context和pdf_open_document
+	JNIEXPORT void JNICALL
+	Java_org_ebookdroid_droids_mupdf_codec_MuPdfDocument_free(JNIEnv *env, jclass clazz, jlong handle)
+		关闭文档，相当于mupdf_free_document，实际调用fz_drop_document和fz_drop_outline和jni_free_locks和fz_drop_context（？？？为什么不是mupdf_free_document）
+	JNIEXPORT jint JNICALL
+	Java_org_ebookdroid_droids_mupdf_codec_MuPdfDocument_getPageInfo(JNIEnv *env, jclass cls, jlong handle, jint pageNumber,
+																 jobject cpi)
+		获取页面信息，实际调用fz_load_page和fz_bound_page，然后赋值到cpi的width、height属性值（dpi、rotation和version没有用，都是0）
+	------------------------------------------
+	JNIEXPORT jlong JNICALL
+	Java_org_ebookdroid_droids_mupdf_codec_MuPdfLinks_getFirstPageLink(JNIEnv *env, jclass clazz, jlong handle,
+																   jlong pagehandle)
+		获取链接的对象指针，实际调用fz_load_links，数据结构fz_link
+	JNIEXPORT jlong JNICALL
+	Java_org_ebookdroid_droids_mupdf_codec_MuPdfLinks_getNextPageLink(JNIEnv *env, jclass clazz, jlong linkhandle)
+		获取下一个link->next
+	JNIEXPORT jint JNICALL
+	Java_org_ebookdroid_droids_mupdf_codec_MuPdfLinks_getPageLinkType(JNIEnv *env, jclass clazz, jlong linkhandle)
+		获取类型，link->dest.kind
+	JNIEXPORT jstring JNICALL
+	Java_org_ebookdroid_droids_mupdf_codec_MuPdfLinks_getPageLinkUrl(JNIEnv *env, jclass clazz, jlong linkhandle)
+		获取URI字符串，link->dest.ld.uri.uri
+	JNIEXPORT jboolean JNICALL
+	Java_org_ebookdroid_droids_mupdf_codec_MuPdfLinks_fillPageLinkSourceRect(JNIEnv *env, jclass clazz, jlong linkhandle,
+																		 jfloatArray boundsArray)
+		获取页面链接源区域，把link->rect.x0/y0/x1/y1复制到boundsArray数组中
+	JNIEXPORT jint JNICALL
+	Java_org_ebookdroid_droids_mupdf_codec_MuPdfLinks_getPageLinkTargetPage(JNIEnv *env, jclass clazz, jlong linkhandle)
+		获取目标页码，返回link->dest.ld.gotor.page页码
+	JNIEXPORT jint JNICALL
+	Java_org_ebookdroid_droids_mupdf_codec_MuPdfLinks_fillPageLinkTargetPoint(JNIEnv *env, jclass clazz, jlong linkhandle,
+																		  jfloatArray pointArray)
+		获取目标点，把link->dest.ld.gotor.lt.x/.y复制到pointArray，返回link->dest.ld.gotor.flags
+	------------------------------------------
+	JNIEXPORT jint JNICALL
+	Java_org_ebookdroid_droids_mupdf_codec_MuPdfDocument_getPageCount(JNIEnv *env, jclass clazz, jlong handle)
+		获取页数，实际调用fz_count_pages
+	------------------------------------------
+	JNIEXPORT jlong JNICALL
+	Java_org_ebookdroid_droids_mupdf_codec_MuPdfPage_open(JNIEnv *env, jclass clazz, jlong dochandle, jint pageno)
+		打开页面，实际调用fz_new_display_list和fz_new_list_device/fz_drop_device和fz_load_page和fz_clone_context和fz_run_page
+	JNIEXPORT void JNICALL
+	Java_org_ebookdroid_droids_mupdf_codec_MuPdfPage_free(JNIEnv *env, jclass clazz, jlong dochandle, jlong handle)
+		关闭页面，实际调用fz_drop_display_list和fz_drop_page和fz_drop_context
+	JNIEXPORT void JNICALL
+	Java_org_ebookdroid_droids_mupdf_codec_MuPdfPage_getBounds(JNIEnv *env, jclass clazz, jlong dochandle, jlong handle,
+														   jfloatArray bounds)
+		获取页面信息，实际调用fz_bound_page，把page_bounds->x0/y0/x1/y1赋值到bounds数组中
+	JNIEXPORT void JNICALL
+	Java_org_ebookdroid_droids_mupdf_codec_MuPdfPage_renderPage(JNIEnv *env, jobject this, jlong dochandle, jlong pagehandle,
+															jintArray viewboxarray, jfloatArray matrixarray,
+															jintArray bufferarray, jint nightmode, jint slowcmyk)
+		通过fz_run_display_list把页面画到bufferarray上
+	JNIEXPORT jboolean JNICALL
+	Java_org_ebookdroid_droids_mupdf_codec_MuPdfPage_renderPageBitmap(JNIEnv *env, jobject this, jlong dochandle,
+																  jlong pagehandle, jintArray viewboxarray,
+																  jfloatArray matrixarray, jobject bitmap, jint nightmode, jint slowcmyk)
+		通过fz_run_display_list把页面画到pixels，然后映射到bitmap上（通过NativeBitmap_lockPixels映射bitmap到c内存块pixels）
+	------------------------------------------
+	static int charat(fz_context *ctx, fz_stext_page *page, int idx)
+		根据索引获取字符（数据结构fz_stext_page）
+	static fz_rect bboxcharat(fz_context *ctx, fz_stext_page *page, int idx)
+		根据索引获取区域
+	static int textlen(fz_context *ctx, fz_stext_page *page)
+		获取文本长度
+	static int match(fz_context *ctx, CharacterHelper* ch, fz_stext_page *page, const char *s, int n)
+		从页面page的n索引开始比较是否跟字符串s相同
+	JNIEXPORT jobjectArray JNICALL
+	Java_org_ebookdroid_droids_mupdf_codec_MuPdfPage_search(JNIEnv * env, jobject thiz, jlong dochandle, jlong pagehandle,
+															jstring text)
+		搜索跟text相似的结果，把位置信息保存在PageTextBox对象，压进ArrayList，然后通过返回值返回
+	------------------------------------------
+	JNIEXPORT jlong JNICALL
+	Java_org_ebookdroid_droids_mupdf_codec_MuPdfOutline_open(JNIEnv *env, jclass clazz, jlong dochandle)
+		获取大纲句柄，实际调用fz_load_outline
+	JNIEXPORT void JNICALL
+	Java_org_ebookdroid_droids_mupdf_codec_MuPdfOutline_free(JNIEnv *env, jclass clazz, jlong dochandle)
+		释放大纲句柄，实际调用fz_drop_outline
+	JNIEXPORT jstring JNICALL
+	Java_org_ebookdroid_droids_mupdf_codec_MuPdfOutline_getTitle(JNIEnv *env, jclass clazz, jlong outlinehandle)
+		返回大纲标题outline->title
+	JNIEXPORT jstring JNICALL
+	Java_org_ebookdroid_droids_mupdf_codec_MuPdfOutline_getLink(JNIEnv *env, jclass clazz, jlong outlinehandle, jlong dochandle)
+		返回跳转的URI或页数outline->dest.ld.uri.uri和outline->dest.ld.gotor.page + 1
+		判断类型outline->dest.kind
+	JNIEXPORT jint JNICALL
+	Java_org_ebookdroid_droids_mupdf_codec_MuPdfOutline_fillLinkTargetPoint(JNIEnv *env, jclass clazz, jlong outlinehandle,
+																		  jfloatArray pointArray)
+		填充outline->dest.ld.gotor.lt.x和outline->dest.ld.gotor.lt.y到pointArray
+		返回outline->dest.ld.gotor.flags
+	JNIEXPORT jlong JNICALL
+	Java_org_ebookdroid_droids_mupdf_codec_MuPdfOutline_getNext(JNIEnv *env, jclass clazz, jlong outlinehandle)
+		返回大纲下一个标题outline->next（数据结构fz_outline *）
+	JNIEXPORT jlong JNICALL
+	Java_org_ebookdroid_droids_mupdf_codec_MuPdfOutline_getChild(JNIEnv *env, jclass clazz, jlong outlinehandle)
+		返回大纲子标题outline->down
+	------------------------------------------
+	
+
+mupdf.c:
+	------------------------------------------
+	#define JNI_FN(A) Java_com_artifex_mupdfdemo_ ## A
+		导出函数前缀
+	#define PACKAGENAME "com/artifex/mupdfdemo"
+		包名，用于findclass创建Java对象
+	//--------------------------------------------
+	#define LOG_TAG "libmupdf"
+	#define LOGI(...) __android_log_print(ANDROID_LOG_INFO,LOG_TAG,__VA_ARGS__)
+	#define LOGT(...) __android_log_print(ANDROID_LOG_INFO,"alert",__VA_ARGS__)
+	#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR,LOG_TAG,__VA_ARGS__)
+		日志
+	//--------------------------------------------
+	#undef TIME_DISPLAY_LIST
+		测试drawPage的时间
+	#define MAX_SEARCH_HITS (500)
+		最大搜索结果数量
+	#define NUM_CACHE (3)
+		最大缓存页数3
+	#define STRIKE_HEIGHT (0.375f)
+		划线批注的高度
+	#define UNDERLINE_HEIGHT (0.075f)
+		下划线批注的高度
+	#define LINE_THICKNESS (0.07f)
+		线粗
+	#define INK_THICKNESS (4.0f)
+		墨水线粗
+(X)
+	#define SMALL_FLOAT (0.00001)
+		没用到
+(X)
+	#define PROOF_RESOLUTION (300)
+		PROOF分辨率？
+	//--------------------------------------------
+(X)
+	enum
+	{
+		NONE,
+		TEXT,
+		LISTBOX,
+		COMBOBOX,
+		SIGNATURE
+	};
+		挂件类型枚举
+	//--------------------------------------------
+	typedef struct rect_node_s rect_node;
+	struct rect_node_s;
+		矩形节点数据结构
+	//--------------------------------------------
+	typedef struct
+	} page_cache;
+		页缓存数据结构
+	//--------------------------------------------
+	typedef struct globals_s globals;
+	struct globals_s
+		文档数据结构
+	//--------------------------------------------
+	static jfieldID global_fid;
+	static jfieldID buffer_fid;
+		全局文档指针
+		全局缓冲指针
+	//--------------------------------------------
+	#define CAST(type, var) (type)pointer_cast(var)
+		转换指针类型
+	static inline void *pointer_cast(jlong l)
+		转换指针类型
+	static inline jlong jlong_cast(void *p)
+		转换为long
+	//--------------------------------------------
+	static void drop_changed_rects(fz_context *ctx, rect_node **nodePtr)
+		释放rect_node链表（fz_rect封装）
+	static void drop_page_cache(globals *glo, page_cache *pc)
+		释放page_cache页缓存（封装fz_page）
+	static void dump_annotation_display_lists(globals *glo)
+		清空glo->pages[i].annot_list，实际调用fz_drop_display_list（删除批注显示列表？？？）
+	//--------------------------------------------	
+(X)
+	static void show_alert(globals *glo, pdf_alert_event *alert)
+		等待信号量alert_reply_cond
+(X)
+	static void event_cb(fz_context *ctx, pdf_document *doc, pdf_doc_event *event, void *data)
+		callback，实际调用show_alert
+(X)
+	static void alerts_init(globals *glo)
+		插入事件event_cb，用于MuPDFCore_openFile和MuPDFCore_openBuffer
+(X)
+	static void alerts_fin(globals *glo)
+		释放事件
+	//--------------------------------------------
+	static globals *get_globals(JNIEnv *env, jobject thiz)
+		获取global_fid，并且把this更新到glo->thiz，把env更新到glo->env
+	static globals *get_globals_any_thread(JNIEnv *env, jobject thiz)
+		跨线程get_globals，不同步->thiz和->env
+	//--------------------------------------------
+	JNIEXPORT jlong JNICALL
+	JNI_FN(MuPDFCore_openFile)(JNIEnv * env, jobject thiz, jstring jfilename)
+		打开文件，实际调用fz_new_context和fz_open_document
+		基于文件名的打开
+	//--------------------------------------------
+(X)
+	typedef struct buffer_state_s
+	{
+		globals *globals;
+		char buffer[4096];
+	}
+	buffer_state;
+		内存流数据结构
+(X)
+	static int bufferStreamNext(fz_context *ctx, fz_stream *stream, int max)
+		把fileBuffer属性向stream指针填充数据
+(X)
+	static void bufferStreamClose(fz_context *ctx, void *state)
+		释放内存区state（数据结构buffer_state）
+(X)
+	static void bufferStreamSeek(fz_context *ctx, fz_stream *stream, int offset, int whence)
+		对stream->state执行seek定位
+(X)
+	JNIEXPORT jlong JNICALL
+	JNI_FN(MuPDFCore_openBuffer)(JNIEnv * env, jobject thiz, jstring jmagic)
+		获取fileBuffer属性id
+		基于buffer流的打开
+	//--------------------------------------------
+	JNIEXPORT int JNICALL
+	JNI_FN(MuPDFCore_countPagesInternal)(JNIEnv *env, jobject thiz)
+		获取页数，实际调用fz_count_pages
+	JNIEXPORT jstring JNICALL
+	JNI_FN(MuPDFCore_fileFormatInternal)(JNIEnv * env, jobject thiz)
+		获取文件格式，实际调用fz_lookup_metadata
+	JNIEXPORT jboolean JNICALL
+	JNI_FN(MuPDFCore_isUnencryptedPDFInternal)(JNIEnv * env, jobject thiz)
+		是否非加密，实际调用pdf_crypt_version
+	//---------------------------------------------
+	JNIEXPORT void JNICALL
+	JNI_FN(MuPDFCore_gotoPageInternal)(JNIEnv *env, jobject thiz, int page)
+		加载页面，实际调用fz_load_page，写入缓存page_cache
+		设置当前页glo->current = i;
+	JNIEXPORT float JNICALL
+	JNI_FN(MuPDFCore_getPageWidth)(JNIEnv *env, jobject thiz)
+		获取宽度，读缓存glo->pages[glo->current].width
+	JNIEXPORT float JNICALL
+	JNI_FN(MuPDFCore_getPageHeight)(JNIEnv *env, jobject thiz)
+		获取高度，读缓存glo->pages[glo->current].height;
+	//---------------------------------------------
+	JNIEXPORT jboolean JNICALL
+	JNI_FN(MuPDFCore_javascriptSupported)(JNIEnv *env, jobject thiz)
+		是否支持js，实际调用pdf_js_supported
+	//--------------------------------------------
+	static void update_changed_rects(globals *glo, page_cache *pc, pdf_document *idoc)
+		把批注信息画出来，用于MuPDFCore_drawPage
+	JNIEXPORT jboolean JNICALL
+	JNI_FN(MuPDFCore_drawPage)(JNIEnv *env, jobject thiz, jobject bitmap,
+			int pageW, int pageH, int patchX, int patchY, int patchW, int patchH, jlong cookiePtr)
+		把当前页面绘画到bitmap上
+	//--------------------------------------------
+(X)
+	static char *widget_type_string(int t)
+		控件类型转字符串，没用到
+	//--------------------------------------------
+	JNIEXPORT jboolean JNICALL
+	JNI_FN(MuPDFCore_updatePageInternal)(JNIEnv *env, jobject thiz, jobject bitmap, int page,
+			int pageW, int pageH, int patchX, int patchY, int patchW, int patchH, jlong cookiePtr)
+		更新页面信息（批注？？？），如果没有缓存的执行MuPDFCore_drawPage？？？
+		注意这个函数有非缓存页的加载写法
+	//--------------------------------------------
+(X)
+	static int
+	charat(fz_context *ctx, fz_stext_page *page, int idx)
+		没用到这个函数
+(X)
+	static fz_rect
+	bboxcharat(fz_context *ctx, fz_stext_page *page, int idx)
+		没用到这个函数
+(X)
+	static int
+	textlen(fz_stext_page *page)
+		没用到这个函数
+	//--------------------------------------------
+	static int
+	countOutlineItems(fz_outline *outline)
+		大纲数量
+	static int
+	fillInOutlineItems(JNIEnv * env, jclass olClass, jmethodID ctor, jobjectArray arr, int pos, fz_outline *outline, int level)
+		递归获取大纲，用于MuPDFCore_getOutlineInternal
+	//--------------------------------------------
+	JNIEXPORT jboolean JNICALL
+	JNI_FN(MuPDFCore_needsPasswordInternal)(JNIEnv * env, jobject thiz)
+		判断是否有密码，实际调用fz_needs_password
+(X)
+	JNIEXPORT jboolean JNICALL
+	JNI_FN(MuPDFCore_authenticatePasswordInternal)(JNIEnv *env, jobject thiz, jstring password)
+		传入密码，实际调用fz_authenticate_password
+	//--------------------------------------------
+	JNIEXPORT jboolean JNICALL
+	JNI_FN(MuPDFCore_hasOutlineInternal)(JNIEnv * env, jobject thiz)
+		是否有大纲，实际调用fz_load_outline
+	JNIEXPORT jobjectArray JNICALL
+	JNI_FN(MuPDFCore_getOutlineInternal)(JNIEnv * env, jobject thiz)
+		获取大纲，返回OutlineItem数组，间接调用fillInOutlineItems和countOutlineItems
+	//--------------------------------------------
+	JNIEXPORT jobjectArray JNICALL
+	JNI_FN(MuPDFCore_searchPage)(JNIEnv * env, jobject thiz, jstring jtext)
+		在当前页搜索jtext，实际调用fz_search_stext_page，返回Rect数据
+	//--------------------------------------------	
+	JNIEXPORT jobjectArray JNICALL
+	JNI_FN(MuPDFCore_text)(JNIEnv * env, jobject thiz)
+		获取当前页的纯文本，转换为TextChar数据结构
+(X)
+	JNIEXPORT jbyteArray JNICALL
+	JNI_FN(MuPDFCore_textAsHtml)(JNIEnv * env, jobject thiz)
+		获取当前页的html文本，实际调用fz_print_stext_page_html和fz_print_stext_sheet
+	//--------------------------------------------
+(?)
+	JNIEXPORT void JNICALL
+	JNI_FN(MuPDFCore_addMarkupAnnotationInternal)(JNIEnv * env, jobject thiz, jobjectArray points, fz_annot_type type)
+		添加下划线等类型的线性批注，实际调用pdf_set_markup_annot_quadpoints
+	JNIEXPORT void JNICALL
+	JNI_FN(MuPDFCore_addInkAnnotationInternal)(JNIEnv * env, jobject thiz, jobjectArray arcs)
+		添加墨水批注，通过arcs这个PointF数组，实际调用pdf_set_ink_annot_list和pdf_create_annot和dump_annotation_display_lists
+	JNIEXPORT void JNICALL
+	JNI_FN(MuPDFCore_deleteAnnotationInternal)(JNIEnv * env, jobject thiz, int annot_index)
+		删除当前页的所有批注
+	//--------------------------------------------
+	static void close_doc(globals *glo)
+		关闭文档，用于MuPDFCore_destroying和MuPDFCore_saveInternal
+	JNIEXPORT void JNICALL
+	JNI_FN(MuPDFCore_destroying)(JNIEnv * env, jobject thiz)
+		销毁时关闭文档，对应MuPDFCore_openFile，参考MuPDFCore_saveInternal
+	//--------------------------------------------
+	JNIEXPORT jobjectArray JNICALL
+	JNI_FN(MuPDFCore_getPageLinksInternal)(JNIEnv * env, jobject thiz, int pageNumber)
+		获取所有链接，返回LinkInfoInternal等数组，实际调用fz_load_links
+		参考MuPDFCore_gotoPageInternal跳转
+(X)
+	JNIEXPORT jobjectArray JNICALL
+	JNI_FN(MuPDFCore_getWidgetAreasInternal)(JNIEnv * env, jobject thiz, int pageNumber)
+		获取挂件区域，返回RectF数组，实际调用pdf_bound_widget
+
+	JNIEXPORT jobjectArray JNICALL
+	JNI_FN(MuPDFCore_getAnnotationsInternal)(JNIEnv * env, jobject thiz, int pageNumber)
+		获取批注，获取Annotation数组，实际调用fz_first_annot和fz_next_annot
+	//--------------------------------------------
+(X)
+	JNIEXPORT int JNICALL
+	JNI_FN(MuPDFCore_passClickEventInternal)(JNIEnv * env, jobject thiz, int pageNumber, float x, float y)
+		传递点击事件
+	//--------------------------------------------
+(X)
+	JNIEXPORT jstring JNICALL
+	JNI_FN(MuPDFCore_getFocusedWidgetTextInternal)(JNIEnv * env, jobject thiz)
+		获取焦点的挂件的文本？？？，实际调用pdf_text_widget_text
+(X)
+	JNIEXPORT int JNICALL
+	JNI_FN(MuPDFCore_setFocusedWidgetTextInternal)(JNIEnv * env, jobject thiz, jstring jtext)
+		设置焦点挂件的文本，实际调用pdf_text_widget_set_text
+(X)
+	JNIEXPORT jobjectArray JNICALL
+	JNI_FN(MuPDFCore_getFocusedWidgetChoiceOptions)(JNIEnv * env, jobject thiz)
+		返回挂件选择的String数组，实际调用pdf_choice_widget_options
+(X)
+	JNIEXPORT jobjectArray JNICALL
+	JNI_FN(MuPDFCore_getFocusedWidgetChoiceSelected)(JNIEnv * env, jobject thiz)
+		返回选择的String数组，实际调用pdf_choice_widget_value
+(X)
+	JNIEXPORT void JNICALL
+	JNI_FN(MuPDFCore_setFocusedWidgetChoiceSelectedInternal)(JNIEnv * env, jobject thiz, jobjectArray arr)
+		设置挂件的选择值，实际调用pdf_choice_widget_set_value
+(X)
+	JNIEXPORT int JNICALL
+	JNI_FN(MuPDFCore_getFocusedWidgetTypeInternal)(JNIEnv * env, jobject thiz)
+		返回挂件类型值，实际调用pdf_widget_get_type
+	//--------------------------------------------
+(X)
+	enum
+	{
+		Signature_NoSupport,
+		Signature_Unsigned,
+		Signature_Signed
+	};
+		文档签名的三种状态：不支持，未签名，签名
+(X)
+	JNIEXPORT int JNICALL
+	JNI_FN(MuPDFCore_getFocusedWidgetSignatureState)(JNIEnv * env, jobject thiz)
+		获取挂件签名状态，实际调用pdf_signatures_supported和((pdf_annot *)focus)->obj
+(X)
+	JNIEXPORT jstring JNICALL
+	JNI_FN(MuPDFCore_checkFocusedSignatureInternal)(JNIEnv * env, jobject thiz)
+		获取挂件签名字符串，实际调用pdf_check_signature
+(X)
+	JNIEXPORT jboolean JNICALL
+	JNI_FN(MuPDFCore_signFocusedSignatureInternal)(JNIEnv * env, jobject thiz, jstring jkeyfile, jstring jpassword)
+		使用密码和用户名签名，实际调用pdf_sign_signature
+	//--------------------------------------------
+(X)
+	JNIEXPORT jobject JNICALL
+	JNI_FN(MuPDFCore_waitForAlertInternal)(JNIEnv * env, jobject thiz)
+		等待对话框，配合alerts_init使用
+(X)
+	JNIEXPORT void JNICALL
+	JNI_FN(MuPDFCore_replyToAlertInternal)(JNIEnv * env, jobject thiz, jobject alert)
+		响应对话框
+(X)
+	JNIEXPORT void JNICALL
+	JNI_FN(MuPDFCore_startAlertsInternal)(JNIEnv * env, jobject thiz)
+		初始化对话框
+(X)
+	JNIEXPORT void JNICALL
+	JNI_FN(MuPDFCore_stopAlertsInternal)(JNIEnv * env, jobject thiz)
+		销毁对话框
+	//--------------------------------------------
+	JNIEXPORT jboolean JNICALL
+	JNI_FN(MuPDFCore_hasChangesInternal)(JNIEnv * env, jobject thiz)
+		判断是否有修改过，实际调用pdf_specifics和pdf_has_unsaved_changes
+	//--------------------------------------------
+	static char *tmp_path(char *path)
+		获取path对应的临时文件名，用于保存批注信息
+	JNIEXPORT void JNICALL
+	JNI_FN(MuPDFCore_saveInternal)(JNIEnv * env, jobject thiz)
+		把批注写入文件，再写入pdf，实际调用pdf_save_document、
+		这个也包括关闭文件
+	//--------------------------------------------
+(X)
+	JNIEXPORT void JNICALL
+	JNI_FN(MuPDFCore_dumpMemoryInternal)(JNIEnv * env, jobject thiz)
+		打印内存，编译器无操作
+	//--------------------------------------------
+	JNIEXPORT jlong JNICALL
+	JNI_FN(MuPDFCore_createCookie)(JNIEnv * env, jobject thiz)
+		分配C内存块（数据结构fz_cookie），用于MuPDFCore_drawPage和MuPDFCore_updatePageInternal
+	JNIEXPORT void JNICALL
+	JNI_FN(MuPDFCore_destroyCookie)(JNIEnv * env, jobject thiz, jlong cookiePtr)
+		销毁C内存块
+	JNIEXPORT void JNICALL
+	JNI_FN(MuPDFCore_abortCookie)(JNIEnv * env, jobject thiz, jlong cookiePtr)
+		设置cookie->abort = 1
+	//--------------------------------------------
+(X)
+	static char *tmp_gproof_path(char *path)
+		尝试打开gproof后缀文件
+(X)
+	JNIEXPORT jstring JNICALL
+	JNI_FN(MuPDFCore_startProofInternal)(JNIEnv * env, jobject thiz, int inResolution)
+		开始Proof检查，编译期无操作
+(X)
+	JNIEXPORT void JNICALL
+	JNI_FN(MuPDFCore_endProofInternal)(JNIEnv * env, jobject thiz, jstring jfilename)
+		结束Proof检查，编译期无操作
+(X)
+	JNIEXPORT jboolean JNICALL
+	JNI_FN(MuPDFCore_gprfSupportedInternal)(JNIEnv * env)
+		是否支持GPROOF，编译期不支持这种格式
+	//--------------------------------------------
+(X)
+	JNIEXPORT int JNICALL
+	JNI_FN(MuPDFCore_getNumSepsOnPageInternal)(JNIEnv *env, jobject thiz, int page)
+		数sep数量，实际调用fz_count_separations_on_page
+(X)
+	JNIEXPORT void JNICALL
+	JNI_FN(MuPDFCore_controlSepOnPageInternal)(JNIEnv *env, jobject thiz, int page, int sep, jboolean disable)
+		控制是否分隔，实际调用fz_control_separation_on_page
+(X)
+	JNIEXPORT jobject JNICALL
+	JNI_FN(MuPDFCore_getSepInternal)(JNIEnv *env, jobject thiz, int page, int sep)
+		返回Separation对象，实际调用fz_get_separation_on_page
+	//--------------------------------------------
+	

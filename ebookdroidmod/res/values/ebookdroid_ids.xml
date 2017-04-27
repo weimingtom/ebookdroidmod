@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+	<item type="id" name="ebookdroid__gotopage" />
+	<item type="id" name="ebookdroid__annotation" />
+	<item type="id" name="ebookdroid__annotation_back" />
+	<item type="id" name="ebookdroid__annotation_pen" />
+	<item type="id" name="ebookdroid__annotation_sel" />
+	<item type="id" name="ebookdroid__annotation_pen_cancel" />
+	<item type="id" name="ebookdroid__annotation_pen_ok" />
+	<item type="id" name="ebookdroid__annotation_sel_cancel" />
+	<item type="id" name="ebookdroid__annotation_sel_ok" />
+	
+</resources>
